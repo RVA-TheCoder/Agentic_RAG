@@ -205,3 +205,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+HF_Embedding_Models/*
+HF_LLM_Models/*
+HF_Reranker_Model/*
+input_textfiles/*
+src/agentic_rag/HF_LLM_Models/*
+src/agentic_rag/HF_Embedding_Models/*
+src/agentic_rag/HF_Reranker_Model/*
+research/*
