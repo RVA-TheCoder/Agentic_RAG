@@ -1,1 +1,23 @@
+streamlit
+duckduckgo-search
+nltk
+spacy
+tqdm
+pandas
+numpy
+fpdf2
+pymupdf    # for using fitz
+pywin32    # For import pythoncom and import win32com.client
+python-dotenv
+#transformers==4.53.2
+#sentence-transformers==5.0.0
+
+## --extra-index-url https://download.pytorch.org/whl/cu121  # tells pip to also search PyTorch's custom repository for GPU wheels.
+#torch==2.5.1+cu121
+#torchvision==0.18.1+cu121
+#torchaudio==2.2.1+cu121
+#huggingface-hub==0.33.4
+
+
+
 -e .
