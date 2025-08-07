@@ -1,26 +1,20 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 import random
-
-
+import re
 import os
 import requests
 import fitz
 # for progress bars, requires !pip install tqdm and run pip install -U jupyter ipywidgets
 from tqdm.auto import tqdm
 
-import re
-
 import torch
 
 from spacy.lang.en import English
-
 from duckduckgo_search import DDGS
 
-from agentic_rag.constants.constants import METAPHOR_API_KEY
+from agentic_rag.constants.constants import METAPHOR_API_KEY,ONFLY_topk_URLs_to_return
 
 
 
@@ -28,6 +22,18 @@ from agentic_rag.constants.constants import METAPHOR_API_KEY
 
 # Check device Availability
 def device_availabilty():
+    
+    """
+    Detects and returns the available processing device (CUDA GPU or CPU).
+    
+    This function checks if a CUDA-enabled GPU is available. If so, it sets the 
+    device to "cuda", retrieves and prints the total GPU memory in GB. If CUDA is 
+    not available, it defaults to using the CPU and prints the selected device.
+
+    Returns: 
+        str: "cuda" if a GPU is available, otherwise "cpu".
+    """
+    
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
     #print("torch version : ",torch.__version__)                 # 2.5.1
@@ -52,6 +58,21 @@ def device_availabilty():
 
 # Import or Download a Document
 def read_or_download_file(filepath, file_url):
+
+    """
+    Checks if a file exists locally, and downloads it from the given URL if not.
+
+    This function verifies the presence of a file at the specified 'filepath'. 
+    If the file is missing, it sends a GET request to the provided 'file_url' and saves the file 
+    locally using the filename derived from 'filepath'.
+    
+    parameters : 
+        (a) filepath (str): The local file path to check or save the downloaded file.
+        (b) file_url (str): The URL from which to download the file if it doesn't exist.
+
+    Returns:
+        None
+    """
 
     # Download PDF if it doesn't already exist
     if not os.path.exists(filepath):
@@ -119,6 +140,26 @@ def text_formatter(text: str) -> str:
 # Reading the embedding file
 def load_embeddings_and_embedding_df(filepath):
 
+    """
+    Loads a saved CSV file containing text chunks and their corresponding embeddings.
+
+    If the file exists at the specified path, this function reads the CSV, converts the
+    string-encoded embedding column into NumPy arrays, and then converts them into a 
+    PyTorch tensor of dtype float16 for efficient GPU processing.
+
+    Parameters :
+        (a) filepath (str): Path to the CSV file containing the saved embeddings.
+
+    Returns:
+        tuple:
+            - embeddings (torch.Tensor): Tensor of embeddings loaded from the file.
+            - text_chunks_and_embeddings_df (pd.DataFrame): DataFrame with original text chunks and their embeddings.
+
+    Raises:
+        Prints a warning if the file does not exist and returns None.
+    """
+    
+    
     if os.path.exists(filepath) : 
         # read saved .csv file
         text_chunks_and_embeddings_df = pd.read_csv(filepath)
@@ -144,6 +185,7 @@ def load_embeddings_and_embedding_df(filepath):
 
 # Get the LLM model size  
 def get_model_mem_size(model: torch.nn.Module):
+    
     """
     Get how much memory a PyTorch model takes up.
 
@@ -166,6 +208,20 @@ def get_model_mem_size(model: torch.nn.Module):
 
 def online_search_duckduckgo(user_query, topk_results=2):
     
+    """
+    Performs an online search using the DuckDuckGo search engine and returns a list of result URLs.
+
+    Utilizes the DuckDuckGo Search API via the 'duckduckgo_search' library to fetch web search results 
+    based on the user query.
+
+    Parameters : 
+        (a) user_query (str): The search query entered by the user.
+        (b) topk_results (int, optional): Number of top search results to retrieve. Defaults to 2.
+
+    Returns:
+        list[str]: A list of URLs extracted from the top search results.
+    """
+    
     results = DDGS().text(user_query, max_results=topk_results)
     url_list = []
     for item in results:
@@ -177,9 +233,24 @@ def online_search_duckduckgo(user_query, topk_results=2):
     return url_list
 
 
-def online_search_metaphor(user_query, topk_results=5):
+def online_search_metaphor(user_query, topk_results=ONFLY_topk_URLs_to_return):
     
-    #METAPHOR_API_KEY = "a4ecdad2-9a0c-416e-8eaa-a36f1f365842"  # Replace with env var in prod
+    """
+    Performs a semantic web search using the Metaphor API and returns a list of relevant URLs.
+
+    Sends a POST request to Metaphor's semantic search API with the user query and specified parameters 
+    like result count and publish date filters.
+
+    Parameters : 
+        (a) user_query (str): The search query to be processed semantically.
+        (b) topk_results (int): Number of top search results to return.
+
+    Returns:
+        list[str]: A list of URLs from the top search results.
+
+    Note:
+        Requires a valid 'METAPHOR_API_KEY' to be defined in the environment or globally.
+    """
 
     headers = {
         "x-api-key": METAPHOR_API_KEY,
@@ -211,9 +282,9 @@ def online_search_metaphor(user_query, topk_results=5):
 
 
 
-import re
 
 def format_llm_output(answer: str, deduplicate: bool = True):
+    
     # Step 1: Convert escaped newlines to real newlines
     if "\\n" in answer:
         answer = answer.replace("\\n", "\n")
@@ -238,6 +309,11 @@ def format_llm_output(answer: str, deduplicate: bool = True):
 
     # Step 8 (optional): Deduplicate identical lines
     if deduplicate:
+        """
+        This code removes duplicate non-empty lines from a multi-line string (answer) while 
+        preserving blank lines for formatting. It improves the readability of LLM-generated 
+        responses by eliminating repeated statements when the deduplicate flag is enabled.
+        """
         lines_seen = set()
         unique_lines = []
         for line in answer.split('\n'):
@@ -255,6 +331,35 @@ def format_llm_output(answer: str, deduplicate: bool = True):
 
 
 
+def convert_markdown_to_html(answer: str) -> str:
+    
+    lines = answer.strip().split("\n")
+    html_lines = []
+    inside_list = False 
 
+    for line in lines:
+        line = line.strip()
+
+        # Check if it's a bullet line (starts with "* " or "- ")
+        if line.startswith("* ") or line.startswith("- "):
+            if not inside_list:
+                html_lines.append("<ul>")
+                inside_list = True
+
+            # Remove markdown asterisks and wrap content in <strong>
+            content = line.lstrip("*- ").replace("**", "").strip()
+            html_lines.append(f"<li><strong>{content}</strong></li>")
+        else:
+            if inside_list:
+                html_lines.append("</ul>")
+                inside_list = False
+
+            # Convert normal lines to paragraphs
+            html_lines.append(f"<p>{line}</p>")
+
+    if inside_list:
+        html_lines.append("</ul>")
+
+    return "\n".join(html_lines)
 
 

@@ -11,7 +11,7 @@ project_name="agentic_rag"
 list_of_files=[
     ".github/workflows/.gitkeep",
     f"src/{project_name}/__init__.py",
-    f"src/{project_name}/components/__init__.py",
+    #f"src/{project_name}/components/__init__.py",
     f"src/{project_name}/utils_methods/__init__.py",
     f"src/{project_name}/ask_from_url/__init__.py",
     f"src/{project_name}/embedding_model/__init__.py",

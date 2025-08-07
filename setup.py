@@ -25,7 +25,7 @@ setuptools.setup(
     version=__version__,
     author=AUTHOR_USER_NAME,
     author_email=AUTHOR_EMAIL,
-    description="A small python package for CNN app",
+    description="A small python package for Agentic RAG app",
     long_description=long_description,
     long_description_content="text/markdown",
     url=f"https://github.com/{AUTHOR_USER_NAME}/{REPO_NAME}",
@@ -39,7 +39,7 @@ setuptools.setup(
 """
 Explanation of above code :
 
-(a) name: name of the package (cnn_classifier).
+(a) name: name of the package (agentic_rag).
 (b)version, author, author_email: metadata.
 
 (c)description: a short description for your package.
