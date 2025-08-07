@@ -1,48 +1,39 @@
 import streamlit as st
 import os
+from markdown import markdown  # Add this import at the top of your file
 
 from src.agentic_rag.rag_input_preprocessor.text_preprocessing import TextPreprocessing
 from src.agentic_rag.constants.constants import pages_and_chunks_df_filepath, sentences_per_chunk
-from src.agentic_rag.utils_methods.basic_methods import format_llm_output, device_availabilty
+from src.agentic_rag.utils_methods.basic_methods import (format_llm_output,
+                                                         device_availabilty ,
+                                                         convert_markdown_to_html,
+                                                         get_model_mem_size)
+
 from src.agentic_rag.embedding_model.embedding_model import EmbeddingModel
-from src.agentic_rag.constants.constants import embeddings_df_save_path, topk_resources_to_return, weburl_filename_path, URL_embeddings_df_save_path
+
+from src.agentic_rag.constants.constants import (embeddings_df_save_path,
+                                                 is_min_token_length_required,
+                                                 #topk_resources_to_return,
+                                                 weburl_filename_path,
+                                                 URL_embeddings_df_save_path,
+                                                 embedding_model_name,
+                                                 local_embed_model_dir,
+                                                 #llm_model_id,
+                                                 #local_dir_llm,
+                                                 topk_semantic_results,
+                                                 max_output_tokens_final,
+                                                 model_name)
+
 from src.agentic_rag.semantic_search.semantic_search import SemanticSearch
 from src.agentic_rag.generate_text.augmented_generation import AugmentedGeneration
 from src.agentic_rag.ask_from_url.ask_from_url import AskUrl
 
-from markdown import markdown  # Add this import at the top of your file
 
-
-def convert_markdown_to_html(answer: str) -> str:
-    lines = answer.strip().split("\n")
-    html_lines = []
-    inside_list = False
-
-    for line in lines:
-        line = line.strip()
-
-        # Check if it's a bullet line (starts with "* " or "- ")
-        if line.startswith("* ") or line.startswith("- "):
-            if not inside_list:
-                html_lines.append("<ul>")
-                inside_list = True
-
-            # Remove markdown asterisks and wrap content in <strong>
-            content = line.lstrip("*- ").replace("**", "").strip()
-            html_lines.append(f"<li><strong>{content}</strong></li>")
-        else:
-            if inside_list:
-                html_lines.append("</ul>")
-                inside_list = False
-
-            # Convert normal lines to paragraphs
-            html_lines.append(f"<p>{line}</p>")
-
-    if inside_list:
-        html_lines.append("</ul>")
-
-    return "\n".join(html_lines)
-
+import torch
+#Frees unused GPU memory (non-destructive)
+torch.cuda.empty_cache()
+# Resets stats for profiling (no runtime impact)
+torch.cuda.reset_peak_memory_stats()
 
 
 # ──────────────────────────────────────────────────────────────
@@ -52,20 +43,29 @@ semantic_search_object = SemanticSearch()
 
 # Load LLM and tokenizer
 @st.cache_resource(show_spinner="Loading LLM and tokenizer...")
-def load_tokenizer_and_llm(device, model_id, local_dir):
+def load_tokenizer_and_llm(device, model_name,):
+    
     from src.agentic_rag.tokenizer_and_llm_model.tokenizer_and_llm import Tokenizer_and_LLM
+    
+    # tokenizer_and_llm_object = Tokenizer_and_LLM(
+    #     device=device,
+    #     model_id=model_id,
+    #     local_dir=local_dir,
+    #     use_quantization_config=True,
+    # )
+    
     tokenizer_and_llm_object = Tokenizer_and_LLM(
-        device=device,
-        model_id=model_id,
-        local_dir=local_dir,
-        use_quantization_config=True,
-    )
+                                                device=device,
+                                                model_name=model_name,   # phi3 or gemma2b
+                                                
+                                                )
+    
     return tokenizer_and_llm_object.tokenizer_n_LLM()
 
-model_id = "google/gemma-2-2b-it"
-local_dir = "HF_LLM_Models/gemma"
-tokenizer, llm_model = load_tokenizer_and_llm(device, model_id, local_dir)
-
+#model_id = "google/gemma-2-2b-it"
+#local_dir = "HF_LLM_Models/gemma"
+tokenizer, llm_model = load_tokenizer_and_llm(device, model_name=model_name,)
+print(get_model_mem_size(model=llm_model))
 
 # ──────────────────────────────────────────────────────────────
 # Session State Initialization
@@ -128,27 +128,28 @@ if add_data:
 
         # Preprocessing
         text_preprocessing = TextPreprocessing(
-            filepath=filepath,
-            sentences_per_chunk=sentences_per_chunk,
-            min_token_length=None,
-            pages_and_chunks_df_filepath=pages_and_chunks_df_filepath,
-            save_pages_and_chunks_df=True,
-        )
+                                    filepath=filepath,
+                                    sentences_per_chunk=sentences_per_chunk,
+                                    is_min_token_length_required=is_min_token_length_required,
+                                    pages_and_chunks_df_filepath=pages_and_chunks_df_filepath,
+                                    save_pages_and_chunks_df=True,
+                                )
+        
         pages_and_chunks = text_preprocessing.run_pipeline()
 
         # Embedding
         embedding_model_object = EmbeddingModel(
-            embedding_model_name="all-mpnet-base-v2",
-            local_model_dir="HF_Embedding_Models",
-            device=device,
-            embeddings_df_save_path=embeddings_df_save_path,
-        )
+                                embedding_model_name=embedding_model_name,
+                                local_embed_model_dir=local_embed_model_dir,
+                                device=device,
+                                embeddings_df_save_path=embeddings_df_save_path,
+                            )
 
         embedding_model, embeddings, _, df = embedding_model_object.run_embedding_pipeline(
-            pages_and_chunks=pages_and_chunks, replace=True
-        )
+                                                pages_and_chunks=pages_and_chunks, replace=True
+                                            )
 
-        # Save session state
+        # Save session state 
         with st.sidebar:
             st.session_state.embedding_model = embedding_model
             st.session_state.embedding_data = embeddings
@@ -158,26 +159,29 @@ if add_data:
             st.success("✅ File processed successfully!")
 
     elif url.strip():
+        
         ask_url = AskUrl(
-            web_url=url,
-            save_pages_and_chunks_df=True,
-            sentences_per_chunk=sentences_per_chunk,
-            min_token_length=None,
-            filename=weburl_filename_path,
-        )
+                        web_url=url,
+                        save_pages_and_chunks_df=True,
+                        sentences_per_chunk=sentences_per_chunk,
+                        is_min_token_length_required=is_min_token_length_required,
+                        filename=weburl_filename_path,
+                    )
+        
         url_pages_and_chunks = ask_url.web_text_preprocessing()
 
         embedding_model_object = EmbeddingModel(
-            embedding_model_name="all-mpnet-base-v2",
-            local_model_dir="HF_Embedding_Models",
-            device=device,
-            embeddings_df_save_path=URL_embeddings_df_save_path,
-        )
+                                        embedding_model_name=embedding_model_name,
+                                        local_embed_model_dir=local_embed_model_dir,
+                                        device=device,
+                                        embeddings_df_save_path=URL_embeddings_df_save_path,
+                                    )
 
-        embedding_model, url_embeddings, _, url_df = embedding_model_object.run_embedding_pipeline(
-            pages_and_chunks=url_pages_and_chunks,
-            replace=True
-        )
+        embedding_model, url_embeddings, url_text_chunks_and_embeddings, url_df = embedding_model_object.run_embedding_pipeline(
+                                            pages_and_chunks=url_pages_and_chunks,
+                                            replace=True
+                                        )
+        
 
         with st.sidebar:
             st.session_state.embedding_model = embedding_model
@@ -199,27 +203,28 @@ if st.session_state.mode:
 # ──────────────────────────────────────────────────────────────
 # Inference
 if user_query and st.session_state.data_ready:
+    
     context, context_items, scores, indices = semantic_search_object.run_pipeline(
-        user_query=user_query,
-        embeddings=st.session_state.embedding_data,
-        embedding_model=st.session_state.embedding_model,
-        pages_n_chunks_embeddings_df=st.session_state.text_df,
-        device=device,
-        print_relevant_resources=True,
-        topk_results=topk_resources_to_return
-    )
+                                            user_query=user_query,
+                                            embeddings=st.session_state.embedding_data,
+                                            embedding_model=st.session_state.embedding_model,
+                                            pages_n_chunks_embeddings_df=st.session_state.text_df,
+                                            device=device,
+                                            print_relevant_resources=True,
+                                            topk_semantic_results=topk_semantic_results
+                                        )
 
     aug_gen = AugmentedGeneration(
-        device=device,
-        embedding_model=st.session_state.embedding_model,
-        tokenizer=tokenizer,
-        llm_model=llm_model,
-        context=context,
-        max_output_tokens=96,
-    )
+                                    device=device,
+                                    embedding_model=st.session_state.embedding_model,
+                                    tokenizer=tokenizer,
+                                    llm_model=llm_model,
+                                    context=context,
+                                    max_output_tokens_final=max_output_tokens_final,
+                                )
 
-    answer = aug_gen.get_final_answer(question=user_query, context=context)
-    cleaned_answer = format_llm_output(answer=answer)
+    raw_answer = aug_gen.get_final_answer(question=user_query, context=context)
+    cleaned_answer = format_llm_output(answer=raw_answer)
 
     st.markdown("**LLM Response:**")
     st.markdown(cleaned_answer)
@@ -240,14 +245,8 @@ if user_query and st.session_state.data_ready:
     st.session_state.chat_history.append(qa_pair_html)
 
     
-    
-    
-    
-from streamlit.components.v1 import html as st_html    
-    
 
-
-
+from streamlit.components.v1 import html as st_html   
 # Chat History Scrollable Display
 if st.session_state.chat_history:
     st.markdown("##### Chat History:")
@@ -264,5 +263,8 @@ if st.session_state.chat_history:
     )
     
     
+    
+    
+   
     
     
